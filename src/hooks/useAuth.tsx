@@ -44,6 +44,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const USERS_STORAGE_KEY = 'tms-users';
 const AUTH_USER_KEY = 'tms-auth-user';
 const AUTH_STATUS_KEY = 'tms-auth-status';
+const USER_PASSWORDS_KEY = 'tms-user-passwords';
 
 // Liste des utilisateurs par défaut
 const DEFAULT_USERS = [
@@ -156,6 +157,7 @@ const ACTION_PERMISSIONS: Record<string, UserRole[]> = {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [userPasswords, setUserPasswords] = useState<Record<string, string>>({});
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const navigate = useNavigate();
@@ -171,11 +173,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsAuthenticated(true);
       }
       
-      // Initialiser la liste des utilisateurs depuis localStorage ou utiliser defaults si vide
-      const storedAllUsers = loadFromLocalStorage<User[]>(
-        USERS_STORAGE_KEY, 
-        DEFAULT_USERS.map(({ password, ...user }) => user)
-      );
+      // Initialiser la liste des utilisateurs depuis localStorage
+      let storedAllUsers = loadFromLocalStorage<User[]>(USERS_STORAGE_KEY, []);
+      
+      // Si aucun utilisateur n'est stocké, utiliser les utilisateurs par défaut
+      if (storedAllUsers.length === 0) {
+        storedAllUsers = DEFAULT_USERS.map(({ password, ...user }) => user);
+        saveToLocalStorage(USERS_STORAGE_KEY, storedAllUsers);
+      }
+      
+      // Initialiser les mots de passe des utilisateurs
+      const defaultPasswords: Record<string, string> = {};
+      DEFAULT_USERS.forEach(user => {
+        defaultPasswords[user.username] = user.password;
+      });
+      
+      // Charger les mots de passe stockés ou utiliser les mots de passe par défaut
+      const storedPasswords = loadFromLocalStorage<Record<string, string>>(USER_PASSWORDS_KEY, defaultPasswords);
+      setUserPasswords(storedPasswords);
       
       setAllUsers(storedAllUsers);
       setIsLoading(false);
@@ -191,37 +206,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [allUsers]);
 
+  // Persist passwords when they change
+  useEffect(() => {
+    if (Object.keys(userPasswords).length > 0) {
+      saveToLocalStorage(USER_PASSWORDS_KEY, userPasswords);
+    }
+  }, [userPasswords]);
+
   const login = async (username: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     
     // Simulation d'un délai réseau
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Recherche de l'utilisateur par nom d'utilisateur et mot de passe
-    const foundUser = DEFAULT_USERS.find(
-      u => u.username === username && u.password === password
-    );
+    // Vérifier si l'utilisateur existe
+    const foundUser = allUsers.find(u => u.username === username);
     
-    if (foundUser) {
-      // Créer un objet utilisateur sans le mot de passe pour le stockage
-      const secureUser = {
-        id: foundUser.id,
-        username: foundUser.username,
-        name: foundUser.name,
-        email: foundUser.email,
-        role: foundUser.role,
-        cin: foundUser.cin,
-        city: foundUser.city,
-        address: foundUser.address
-      };
-      
-      setUser(secureUser);
+    // Vérifier le mot de passe
+    const isPasswordCorrect = foundUser && userPasswords[username] === password;
+    
+    if (foundUser && isPasswordCorrect) {
+      setUser(foundUser);
       setIsAuthenticated(true);
-      saveToLocalStorage(AUTH_USER_KEY, secureUser);
+      saveToLocalStorage(AUTH_USER_KEY, foundUser);
       saveToLocalStorage(AUTH_STATUS_KEY, true);
       
-      toast.success(`Bienvenue, ${secureUser.name}`, {
-        description: `Vous êtes connecté en tant que ${secureUser.role}`,
+      toast.success(`Bienvenue, ${foundUser.name}`, {
+        description: `Vous êtes connecté en tant que ${foundUser.role}`,
       });
       
       setIsLoading(false);
@@ -273,16 +284,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     
+    // Générer un nouvel ID
+    const newId = (allUsers.length + 1).toString();
+    
     const newUser = {
-      id: (allUsers.length + 1).toString(),
+      id: newId,
       ...userData
     };
     
+    // Ajouter l'utilisateur à la liste
     const updatedUsers = [...allUsers, newUser];
     setAllUsers(updatedUsers);
     
+    // Enregistrer le mot de passe
+    const newPasswords = { ...userPasswords, [userData.username]: userData.password || 'admin123' };
+    setUserPasswords(newPasswords);
+    
     // Enregistrer dans localStorage
     saveToLocalStorage(USERS_STORAGE_KEY, updatedUsers);
+    saveToLocalStorage(USER_PASSWORDS_KEY, newPasswords);
     
     toast.success("Utilisateur ajouté", { description: `${newUser.name} a été ajouté avec succès` });
   };
@@ -311,13 +331,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     
-    const updatedUsers = allUsers.filter(user => user.id !== id);
-    setAllUsers(updatedUsers);
-    
-    // Enregistrer dans localStorage
-    saveToLocalStorage(USERS_STORAGE_KEY, updatedUsers);
-    
-    toast.success("Utilisateur supprimé", { description: "L'utilisateur a été supprimé avec succès" });
+    const userToDelete = allUsers.find(user => user.id === id);
+    if (userToDelete) {
+      // Supprimer le mot de passe
+      const { [userToDelete.username]: removedPassword, ...remainingPasswords } = userPasswords;
+      setUserPasswords(remainingPasswords);
+      
+      // Supprimer l'utilisateur
+      const updatedUsers = allUsers.filter(user => user.id !== id);
+      setAllUsers(updatedUsers);
+      
+      // Enregistrer dans localStorage
+      saveToLocalStorage(USERS_STORAGE_KEY, updatedUsers);
+      saveToLocalStorage(USER_PASSWORDS_KEY, remainingPasswords);
+      
+      toast.success("Utilisateur supprimé", { description: "L'utilisateur a été supprimé avec succès" });
+    }
   };
 
   return (

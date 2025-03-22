@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -66,9 +65,6 @@ const AddUserForm: React.FC<AddUserFormProps> = ({ open, onOpenChange, onAddUser
     onAddUser(values);
     form.reset();
     onOpenChange(false);
-    toast.success("Utilisateur ajouté", {
-      description: `${values.name} a été ajouté avec le rôle de ${roleLabels[values.role]}`
-    });
   }
 
   return (
