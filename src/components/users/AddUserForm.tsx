@@ -11,7 +11,6 @@ import { toast } from "sonner";
 import { UserRole } from "@/hooks/useAuth";
 import MoroccanSuggestionInput from '@/components/shared/MoroccanSuggestionInput';
 
-// Définition du schéma de validation
 const userFormSchema = z.object({
   username: z.string().min(3, { message: "Le nom d'utilisateur doit comporter au moins 3 caractères" }),
   name: z.string().min(2, { message: "Le nom doit comporter au moins 2 caractères" }),

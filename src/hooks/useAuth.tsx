@@ -1,4 +1,3 @@
-
 import { useEffect, useState, createContext, useContext, ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from "sonner";
@@ -25,6 +24,11 @@ interface User {
   address?: string;
 }
 
+// Add password property for user creation
+interface UserWithPassword extends Omit<User, 'id'> {
+  password: string;
+}
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -34,7 +38,7 @@ interface AuthContextType {
   hasPermission: (requiredRoles: UserRole[]) => boolean;
   hasActionPermission: (action: string) => boolean;
   allUsers: User[];
-  addUser: (user: Omit<User, 'id'>) => void;
+  addUser: (user: UserWithPassword) => void;
   updateUser: (id: string, userData: Partial<User>) => void;
   deleteUser: (id: string) => void;
 }
@@ -278,7 +282,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Fonctions de gestion des utilisateurs
-  const addUser = (userData: Omit<User, 'id'>) => {
+  const addUser = (userData: UserWithPassword) => {
     if (!hasActionPermission('add-user')) {
       toast.error("Accès refusé", { description: "Vous n'avez pas les permissions pour ajouter un utilisateur" });
       return;
@@ -287,9 +291,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Générer un nouvel ID
     const newId = (allUsers.length + 1).toString();
     
+    const { password, ...userWithoutPassword } = userData;
+    
     const newUser = {
       id: newId,
-      ...userData
+      ...userWithoutPassword
     };
     
     // Ajouter l'utilisateur à la liste
@@ -297,7 +303,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAllUsers(updatedUsers);
     
     // Enregistrer le mot de passe
-    const newPasswords = { ...userPasswords, [userData.username]: userData.password || 'admin123' };
+    const newPasswords = { ...userPasswords, [userData.username]: password || 'admin123' };
     setUserPasswords(newPasswords);
     
     // Enregistrer dans localStorage
